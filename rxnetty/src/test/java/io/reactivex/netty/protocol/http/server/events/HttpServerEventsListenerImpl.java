@@ -229,4 +229,34 @@ public class HttpServerEventsListenerImpl extends HttpServerEventsListener {
     public void onCustomEvent(Object event, Throwable throwable) {
         tcpDelegate.onCustomEvent(event, throwable);
     }
+
+    @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        tcpDelegate.onRequestMoreItemsToRead(itemsRequested);
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        tcpDelegate.onRequestMoreItemsToWrite(itemsRequested);
+    }
+
+    @Override
+    public void onItemRead() {
+        tcpDelegate.onItemRead();
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        tcpDelegate.onItemReceivedToWrite();
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        tcpDelegate.onReadCompletion(remainingReadRequests);
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        tcpDelegate.onWriteCompletion(remainingWriteRequests);
+    }
 }

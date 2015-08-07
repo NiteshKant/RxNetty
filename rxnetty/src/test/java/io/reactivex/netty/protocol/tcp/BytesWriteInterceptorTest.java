@@ -19,6 +19,7 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.reactivex.netty.channel.PrimitiveConversionHandler;
 import io.reactivex.netty.protocol.tcp.BackpressureManagingHandler.BytesWriteInterceptor;
 import io.reactivex.netty.protocol.tcp.BackpressureManagingHandler.WriteStreamSubscriber;
+import io.reactivex.netty.protocol.tcp.client.events.TcpClientEventPublisher;
 import io.reactivex.netty.test.util.MockProducer;
 import org.junit.Rule;
 import org.junit.Test;
@@ -143,7 +144,8 @@ public class BytesWriteInterceptorTest {
         }
 
         WriteStreamSubscriber newSubscriber() {
-            return new WriteStreamSubscriber(channel.pipeline().firstContext(), channel.newPromise());
+            TcpClientEventPublisher p = new TcpClientEventPublisher();
+            return new WriteStreamSubscriber(channel.pipeline().firstContext(), channel.newPromise(), p, p);
         }
 
         private static MockProducer setupSubscriber(WriteStreamSubscriber sub1) {

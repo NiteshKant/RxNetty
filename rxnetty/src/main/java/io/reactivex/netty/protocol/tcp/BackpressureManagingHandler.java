@@ -22,12 +22,17 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.RecyclableArrayList;
+import io.reactivex.netty.channel.events.ConnectionEventListener;
+import io.reactivex.netty.events.EventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
+import rx.Producer;
 import rx.Subscriber;
+import rx.exceptions.MissingBackpressureException;
 import rx.functions.Action0;
 import rx.subscriptions.Subscriptions;
 
@@ -35,10 +40,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(BackpressureManagingHandler.class);
+    protected final AttributeKey<ConnectionEventListener> eventListenerAttributeKey;
+    protected final AttributeKey<EventPublisher> eventPublisherAttributeKey;
+    protected ConnectionEventListener eventListener;
+    protected EventPublisher eventPublisher;
 
     /*Visible for testing*/  enum State {
         ReadRequested,
@@ -54,7 +64,34 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
     private boolean continueDraining;
     private final BytesWriteInterceptor bytesWriteInterceptor;
 
-    protected BackpressureManagingHandler(String thisHandlerName) {
+    protected BackpressureManagingHandler(String thisHandlerName, ConnectionEventListener eventListener,
+                                          EventPublisher eventPublisher) {
+        if (null == eventListener) {
+            throw new IllegalArgumentException("Event listener can not be null.");
+        }
+        if (null == eventPublisher) {
+            throw new IllegalArgumentException("Event publisher can not be null.");
+        }
+        this.eventListener = eventListener;
+        this.eventPublisher = eventPublisher;
+        eventListenerAttributeKey = null;
+        eventPublisherAttributeKey = null;
+        bytesWriteInterceptor = new BytesWriteInterceptor(thisHandlerName);
+    }
+
+    protected BackpressureManagingHandler(String thisHandlerName,
+                                          AttributeKey<ConnectionEventListener> eventListenerAttributeKey,
+                                          AttributeKey<EventPublisher> eventPublisherAttributeKey) {
+        if (null == eventListenerAttributeKey) {
+            throw new IllegalArgumentException("Event listener key can not be null.");
+        }
+        if (null == eventPublisherAttributeKey) {
+            throw new IllegalArgumentException("Event publisher key can not be null.");
+        }
+        this.eventListener = null;
+        this.eventPublisher = null;
+        this.eventListenerAttributeKey = eventListenerAttributeKey;
+        this.eventPublisherAttributeKey = eventPublisherAttributeKey;
         bytesWriteInterceptor = new BytesWriteInterceptor(thisHandlerName);
     }
 
@@ -89,6 +126,23 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+        if (null == eventListener && null == eventPublisher) {
+            eventListener = ctx.channel().attr(eventListenerAttributeKey).get();
+            eventPublisher = ctx.channel().attr(eventPublisherAttributeKey).get();
+        }
+
+        if (null == eventPublisher) {
+            logger.error("No Event publisher bound to the channel, closing channel.");
+            ctx.channel().close();
+            return;
+        }
+
+        if (eventPublisher.publishingEnabled() && null == eventListener) {
+            logger.error("No Event listener bound to the channel and publising is enabled, closing channel.");
+            ctx.channel().close();
+            return;
+        }
+
         ctx.pipeline().addFirst(bytesWriteInterceptor);
         currentState = State.Buffering;
     }
@@ -232,7 +286,8 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
         if (msg instanceof Observable) {
             @SuppressWarnings("rawtypes")
             Observable observable = (Observable) msg; /*One can write heterogneous objects on a channel.*/
-            final WriteStreamSubscriber subscriber = new WriteStreamSubscriber(ctx, promise);
+            final WriteStreamSubscriber subscriber = new WriteStreamSubscriber(ctx, promise, eventListener,
+                                                                               eventPublisher);
             bytesWriteInterceptor.addSubscriber(subscriber);
             subscriber.subscribeTo(observable);
         } else {
@@ -339,7 +394,7 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
         private final ConcurrentLinkedQueue<WriteStreamSubscriber> subscribers = new ConcurrentLinkedQueue<>();
         private final String parentHandlerName;
 
-        /* This should always be access from the eventloop and can be used to manage state befor and after a write to see
+        /* This should always be access from the eventloop and can be used to manage state before and after a write to see
          * if a write started from {@link WriteInspector} made it to this handler.*/
         private boolean messageReceived;
 
@@ -408,15 +463,28 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
 
         private final ChannelHandlerContext ctx;
         private final ChannelPromise overarchingWritePromise;
+        private final ConnectionEventListener eventListener;
+        private final EventPublisher eventPublisher;
         private final Object guard = new Object();
         private boolean isDone; /*Guarded by guard*/
         private boolean isPromiseCompletedOnWriteComplete; /*Guarded by guard. Only transition should be false->true*/
 
+        /*Updater for pendingRequested*/
+        @SuppressWarnings("rawtypes")
+        private static final AtomicLongFieldUpdater<WriteStreamSubscriber> PENDING_RQUESTED_UPDATER =
+                AtomicLongFieldUpdater.newUpdater(WriteStreamSubscriber.class, "pendingRequested");
+
+        private volatile long pendingRequested; // Updated by REQUEST_UPDATER, required to be volatile.
+
         private int listeningTo;
 
-        /*Visible for testing*/ WriteStreamSubscriber(ChannelHandlerContext ctx, ChannelPromise promise) {
+        /*Visible for testing*/ WriteStreamSubscriber(ChannelHandlerContext ctx, ChannelPromise promise,
+                                                      final ConnectionEventListener eventListener,
+                                                      final EventPublisher eventPublisher) {
             this.ctx = ctx;
             overarchingWritePromise = promise;
+            this.eventListener = eventListener;
+            this.eventPublisher = eventPublisher;
             promise.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
@@ -425,6 +493,14 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
                     }
                 }
             });
+            add(Subscriptions.create(new Action0() {
+                @Override
+                public void call() {
+                    if (null != eventPublisher && eventPublisher.publishingEnabled()) {
+                        eventListener.onWriteCompletion(pendingRequested);
+                    }
+                }
+            }));
         }
 
         @Override
@@ -444,6 +520,11 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
 
         @Override
         public void onNext(Object nextItem) {
+
+            if (null != eventPublisher && eventPublisher.publishingEnabled()) {
+                eventListener.onItemReceivedToWrite();
+                PENDING_RQUESTED_UPDATER.decrementAndGet(this);
+            }
 
             final ChannelFuture channelFuture = ctx.write(nextItem);
             synchronized (guard) {
@@ -547,6 +628,11 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
         }
 
         private void requestMore(long more) {
+            if (null != eventPublisher && eventPublisher.publishingEnabled()) {
+                eventListener.onRequestMoreItemsToWrite(more);
+                /*This is only used for event publishing*/
+                PENDING_RQUESTED_UPDATER.addAndGet(this, more);
+            }
             request(more);
         }
 
@@ -556,4 +642,99 @@ public abstract class BackpressureManagingHandler extends ChannelDuplexHandler {
         }
     }
 
+    /*Visible for testing*/ static final class ReadProducer<T> extends RequestReadIfRequiredEvent implements Producer {
+
+        @SuppressWarnings("rawtypes")
+        private static final AtomicLongFieldUpdater<ReadProducer> REQUEST_UPDATER =
+                AtomicLongFieldUpdater.newUpdater(ReadProducer.class, "requested");/*Updater for requested*/
+
+        private volatile long requested; // Updated by REQUEST_UPDATER, required to be volatile.
+
+        private final Subscriber<? super T> subscriber;
+        private final Channel channel;
+        private final ConnectionEventListener eventListener;
+        private final EventPublisher eventPublisher;
+
+        /*Visible for testing*/ ReadProducer(Subscriber<? super T> subscriber, Channel channel,
+                                             final ConnectionEventListener eventListener, final EventPublisher eventPublisher) {
+            this.subscriber = subscriber;
+            this.channel = channel;
+            this.eventListener = eventListener;
+            this.eventPublisher = eventPublisher;
+            this.subscriber.add(Subscriptions.create(new Action0() {
+                @Override
+                public void call() {
+                    if (null != eventPublisher && eventPublisher.publishingEnabled()) {
+                        eventListener.onReadCompletion(requested);
+                    }
+                }
+            }));
+        }
+
+        @Override
+        public void request(long n) {
+            if (null != eventPublisher && eventPublisher.publishingEnabled()) {
+                eventListener.onRequestMoreItemsToRead(n);
+            }
+            if (Long.MAX_VALUE != requested) {
+                if (Long.MAX_VALUE == n) {
+                    // Now turning off backpressure
+                    REQUEST_UPDATER.set(this, Long.MAX_VALUE);
+                } else {
+                    // add n to field but check for overflow
+                    while (true) {
+                        final long current = requested;
+                        long next = current + n;
+                        // check for overflow
+                        if (next < 0) {
+                            next = Long.MAX_VALUE;
+                        }
+                        if (REQUEST_UPDATER.compareAndSet(this, current, next)) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!channel.config().isAutoRead()) {
+                channel.pipeline().fireUserEventTriggered(this);
+            }
+        }
+
+        public void sendOnError(Throwable throwable) {
+            subscriber.onError(throwable);
+        }
+
+        public void sendOnComplete() {
+            subscriber.onCompleted();
+        }
+
+        public void sendOnNext(T nextItem) {
+            if (requested > 0) {
+                if (REQUEST_UPDATER.get(this) != Long.MAX_VALUE) {
+                    REQUEST_UPDATER.decrementAndGet(this);
+                    if (null != eventPublisher && eventPublisher.publishingEnabled()) {
+                        eventListener.onItemRead();
+                    }
+                }
+                subscriber.onNext(nextItem);
+            } else {
+                subscriber.onError(new MissingBackpressureException(
+                        "Received more data on the channel than demanded by the subscriber."));
+            }
+        }
+
+        @Override
+        protected boolean shouldReadMore(ChannelHandlerContext ctx) {
+            return !subscriber.isUnsubscribed() && REQUEST_UPDATER.get(this) > 0;
+        }
+
+        public Subscriber<? super T> getSubscriber() {
+            return subscriber;
+        }
+
+        /*Visible for testing*/long getRequested() {
+            return requested;
+        }
+    }
 }

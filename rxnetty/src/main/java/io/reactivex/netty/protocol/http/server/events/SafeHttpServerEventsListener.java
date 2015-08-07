@@ -235,4 +235,46 @@ final class SafeHttpServerEventsListener extends HttpServerEventsListener implem
             delegate.onCustomEvent(event, throwable);
         }
     }
+
+    @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        if (!completed.get()) {
+            delegate.onRequestMoreItemsToRead(itemsRequested);
+        }
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        if (!completed.get()) {
+            delegate.onRequestMoreItemsToWrite(itemsRequested);
+        }
+    }
+
+    @Override
+    public void onItemRead() {
+        if (!completed.get()) {
+            delegate.onItemRead();
+        }
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        if (!completed.get()) {
+            delegate.onItemReceivedToWrite();
+        }
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        if (!completed.get()) {
+            delegate.onReadCompletion(remainingReadRequests);
+        }
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        if (!completed.get()) {
+            delegate.onWriteCompletion(remainingWriteRequests);
+        }
+    }
 }

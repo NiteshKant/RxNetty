@@ -16,7 +16,8 @@
 package io.reactivex.netty.protocol.tcp;
 
 import io.netty.channel.embedded.EmbeddedChannel;
-import io.reactivex.netty.protocol.tcp.AbstractConnectionToChannelBridge.ReadProducer;
+import io.reactivex.netty.protocol.tcp.BackpressureManagingHandler.ReadProducer;
+import io.reactivex.netty.protocol.tcp.client.events.TcpClientEventPublisher;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -138,7 +139,8 @@ public class ReadProducerTest {
                 public void evaluate() throws Throwable {
                     channel = new EmbeddedChannel();
                     subscriber = Subscribers.empty();
-                    producer = new ReadProducer<>(subscriber, channel);
+                    TcpClientEventPublisher p = new TcpClientEventPublisher();
+                    producer = new ReadProducer<>(subscriber, channel, p, p);
                     base.evaluate();
                 }
             };

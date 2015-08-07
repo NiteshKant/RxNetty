@@ -25,6 +25,8 @@ import io.reactivex.netty.channel.PrimitiveConversionHandler;
 import io.reactivex.netty.protocol.tcp.BackpressureManagingHandler.BytesWriteInterceptor;
 import io.reactivex.netty.protocol.tcp.BackpressureManagingHandler.RequestReadIfRequiredEvent;
 import io.reactivex.netty.protocol.tcp.BackpressureManagingHandler.State;
+import io.reactivex.netty.protocol.tcp.client.events.TcpClientEventListenerImpl;
+import io.reactivex.netty.protocol.tcp.client.events.TcpClientEventPublisher;
 import io.reactivex.netty.test.util.InboundRequestFeeder;
 import org.junit.Rule;
 import org.junit.Test;
@@ -409,7 +411,7 @@ public class BackpressureManagingHandlerTest {
         private final AtomicLong requested = new AtomicLong();
 
         protected MockBackpressureManagingHandler(String thisHandlerName) {
-            super(thisHandlerName);
+            super(thisHandlerName, new TcpClientEventListenerImpl(), new TcpClientEventPublisher());
         }
 
         @Override

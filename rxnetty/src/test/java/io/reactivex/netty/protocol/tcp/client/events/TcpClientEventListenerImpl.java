@@ -181,6 +181,36 @@ public class TcpClientEventListenerImpl extends TcpClientEventListener {
     }
 
     @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        delegate.onRequestMoreItemsToRead(itemsRequested);
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        delegate.onRequestMoreItemsToWrite(itemsRequested);
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        delegate.onItemReceivedToWrite();
+    }
+
+    @Override
+    public void onItemRead() {
+        delegate.onItemRead();
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        delegate.onReadCompletion(remainingReadRequests);
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        delegate.onWriteCompletion(remainingWriteRequests);
+    }
+
+    @Override
     public void onCompleted() {
         delegate.onCompleted();
     }

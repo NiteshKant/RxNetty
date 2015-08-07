@@ -27,12 +27,9 @@ import io.reactivex.netty.channel.events.ConnectionEventListener;
 import io.reactivex.netty.events.EventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import rx.Producer;
 import rx.Subscriber;
-import rx.exceptions.MissingBackpressureException;
 
 import java.nio.channels.ClosedChannelException;
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 /**
  * A bridge between a {@link Connection} instance and the associated {@link Channel}.
@@ -43,7 +40,7 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
  *
  * Lazy subscriptions are allowed on {@link Connection#getInput()} if and only if the channel is configured to
  * not read data automatically (i.e. {@link ChannelOption#AUTO_READ} is set to {@code false}). Otherwise,
- * if {@link Connection#getInput()} is subscribed lazily, the subscriber always recieves an error. The content
+ * if {@link Connection#getInput()} is subscribed lazily, the subscriber always receives an error. The content
  * in this case is disposed upon reading.
  *
  * @param <R> Type read from the connection held by this handler.
@@ -73,11 +70,6 @@ public abstract class AbstractConnectionToChannelBridge<R, W> extends Backpressu
         CLOSED_CHANNEL_EXCEPTION.setStackTrace(EmptyArrays.EMPTY_STACK_TRACE);
     }
 
-    private final AttributeKey<ConnectionEventListener> eventListenerAttributeKey;
-    private final AttributeKey<EventPublisher> eventPublisherAttributeKey;
-
-    protected ConnectionEventListener eventListener;
-    protected EventPublisher eventPublisher;
     private Subscriber<? super Connection<R, W>> newConnectionSub;
     private ReadProducer<R> readProducer;
     private boolean raiseErrorOnInputSubscription;
@@ -85,25 +77,13 @@ public abstract class AbstractConnectionToChannelBridge<R, W> extends Backpressu
 
     protected AbstractConnectionToChannelBridge(String thisHandlerName, ConnectionEventListener eventListener,
                                                 EventPublisher eventPublisher) {
-        super(thisHandlerName);
-        if (null == eventListener) {
-            throw new IllegalArgumentException("Event listener can not be null.");
-        }
-        if (null == eventPublisher) {
-            throw new IllegalArgumentException("Event publisher can not be null.");
-        }
-        this.eventListener = eventListener;
-        this.eventPublisher = eventPublisher;
-        eventListenerAttributeKey = null;
-        eventPublisherAttributeKey = null;
+        super(thisHandlerName, eventListener, eventPublisher);
     }
 
     protected AbstractConnectionToChannelBridge(String thisHandlerName,
                                                 AttributeKey<ConnectionEventListener> eventListenerAttributeKey,
                                                 AttributeKey<EventPublisher> eventPublisherAttributeKey) {
-        super(thisHandlerName);
-        this.eventListenerAttributeKey = eventListenerAttributeKey;
-        this.eventPublisherAttributeKey = eventPublisherAttributeKey;
+        super(thisHandlerName, eventListenerAttributeKey, eventPublisherAttributeKey);
     }
 
     protected AbstractConnectionToChannelBridge(String thisHandlerName, Subscriber<? super Connection<R, W>> connSub,
@@ -111,29 +91,6 @@ public abstract class AbstractConnectionToChannelBridge<R, W> extends Backpressu
                                                 AttributeKey<EventPublisher> eventPublisherAttributeKey) {
         this(thisHandlerName, eventListenerAttributeKey, eventPublisherAttributeKey);
         newConnectionSub = connSub;
-    }
-
-    @Override
-    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-        if (null == eventListener && null == eventPublisher) {
-            eventListener = ctx.channel().attr(eventListenerAttributeKey).get();
-            eventPublisher = ctx.channel().attr(eventPublisherAttributeKey).get();
-        }
-
-        if (null == eventPublisher) {
-            logger.error("No Event publisher bound to the channel, closing channel.");
-            ctx.channel().close();
-            return;
-        }
-
-        if (eventPublisher.publishingEnabled() && null == eventListener) {
-            logger.error("No Event listener bound to the channel and publising is enabled, closing channel.");
-            ctx.channel().close();
-            return;
-        }
-
-
-        super.handlerAdded(ctx);
     }
 
     @Override
@@ -215,7 +172,7 @@ public abstract class AbstractConnectionToChannelBridge<R, W> extends Backpressu
     }
 
     private static boolean isValidToEmitToReadSubscriber(ReadProducer<?> readProducer) {
-        return null != readProducer && !readProducer.subscriber.isUnsubscribed();
+        return null != readProducer && !readProducer.getSubscriber().isUnsubscribed();
     }
 
     protected void onNewReadSubscriber(Connection<R, W> connection, Subscriber<? super R> subscriber) {
@@ -229,7 +186,7 @@ public abstract class AbstractConnectionToChannelBridge<R, W> extends Backpressu
             raiseErrorOnInputSubscription = true;
             final Subscriber<? super R> discardAll = ConnectionInputSubscriberEvent.discardAllInput(connection)
                                                                                    .getSubscriber();
-            final ReadProducer<R> producer = new ReadProducer<>(discardAll, channel);
+            final ReadProducer<R> producer = new ReadProducer<>(discardAll, channel, eventListener, eventPublisher);
             discardAll.setProducer(producer);
             readProducer = producer;
         }
@@ -256,7 +213,7 @@ public abstract class AbstractConnectionToChannelBridge<R, W> extends Backpressu
     }
 
     private void resetConnectionInputSubscriber() {
-        final Subscriber<? super R> connInputSub = null == readProducer? null : readProducer.subscriber;
+        final Subscriber<? super R> connInputSub = null == readProducer? null : readProducer.getSubscriber();
         if (isValidToEmit(connInputSub)) {
             connInputSub.onCompleted();
         }
@@ -266,14 +223,14 @@ public abstract class AbstractConnectionToChannelBridge<R, W> extends Backpressu
 
     private void newConnectionInputSubscriber(final Channel channel, final Subscriber<? super R> subscriber,
                                               final Connection<R, W> connection) {
-        final Subscriber<? super R> connInputSub = null == readProducer? null : readProducer.subscriber;
+        final Subscriber<? super R> connInputSub = null == readProducer? null : readProducer.getSubscriber();
         if (isValidToEmit(connInputSub)) {
             /*Allow only once concurrent input subscriber but allow concatenated subscribers*/
             subscriber.onError(ONLY_ONE_CONN_INPUT_SUB_ALLOWED);
         } else if (raiseErrorOnInputSubscription) {
             subscriber.onError(LAZY_CONN_INPUT_SUB);
         } else {
-            final ReadProducer<R> producer = new ReadProducer<>(subscriber, channel);
+            final ReadProducer<R> producer = new ReadProducer<>(subscriber, channel, eventListener, eventPublisher);
             subscriber.setProducer(producer);
             onNewReadSubscriber(connection, subscriber);
             readProducer = producer;
@@ -285,78 +242,6 @@ public abstract class AbstractConnectionToChannelBridge<R, W> extends Backpressu
             newConnectionSub = event.getSubscriber();
         } else {
             event.getSubscriber().onError(ONLY_ONE_CONN_SUB_ALLOWED);
-        }
-    }
-
-    /*Visible for testing*/ static final class ReadProducer<T> extends RequestReadIfRequiredEvent implements Producer {
-
-        @SuppressWarnings("rawtypes")
-        private static final AtomicLongFieldUpdater<ReadProducer> REQUEST_UPDATER =
-                AtomicLongFieldUpdater.newUpdater(ReadProducer.class, "requested");/*Updater for requested*/
-        private volatile long requested; // Updated by REQUEST_UPDATER, required to be volatile.
-
-        private final Subscriber<? super T> subscriber;
-        private final Channel channel;
-
-        /*Visible for testing*/ ReadProducer(Subscriber<? super T> subscriber, Channel channel) {
-            this.subscriber = subscriber;
-            this.channel = channel;
-        }
-
-        @Override
-        public void request(long n) {
-            if (Long.MAX_VALUE != requested) {
-                if (Long.MAX_VALUE == n) {
-                    // Now turning off backpressure
-                    REQUEST_UPDATER.set(this, Long.MAX_VALUE);
-                } else {
-                    // add n to field but check for overflow
-                    while (true) {
-                        final long current = requested;
-                        long next = current + n;
-                        // check for overflow
-                        if (next < 0) {
-                            next = Long.MAX_VALUE;
-                        }
-                        if (REQUEST_UPDATER.compareAndSet(this, current, next)) {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!channel.config().isAutoRead()) {
-                channel.pipeline().fireUserEventTriggered(this);
-            }
-        }
-
-        public void sendOnError(Throwable throwable) {
-            subscriber.onError(throwable);
-        }
-
-        public void sendOnComplete() {
-            subscriber.onCompleted();
-        }
-
-        public void sendOnNext(T nextItem) {
-            if (requested > 0) {
-                if (REQUEST_UPDATER.get(this) != Long.MAX_VALUE) {
-                    REQUEST_UPDATER.decrementAndGet(this);
-                }
-                subscriber.onNext(nextItem);
-            } else {
-                subscriber.onError(new MissingBackpressureException(
-                        "Received more data on the channel than demanded by the subscriber."));
-            }
-        }
-
-        @Override
-        protected boolean shouldReadMore(ChannelHandlerContext ctx) {
-            return !subscriber.isUnsubscribed() && REQUEST_UPDATER.get(this) > 0;
-        }
-
-        /*Visible for testing*/long getRequested() {
-            return requested;
         }
     }
 }

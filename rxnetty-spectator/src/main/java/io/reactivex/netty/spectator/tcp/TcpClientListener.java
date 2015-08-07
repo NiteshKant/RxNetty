@@ -22,6 +22,7 @@ import io.reactivex.netty.protocol.tcp.client.events.TcpClientEventListener;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static io.reactivex.netty.spectator.SpectatorUtils.*;
 
@@ -52,6 +53,8 @@ public class TcpClientListener extends TcpClientEventListener {
     private final Counter poolReuse;
     private final Counter poolReleases;
 
+    private final AtomicLong pendingReadRequested;
+    private final AtomicLong pendingWriteRequested;
     private final AtomicInteger pendingWrites;
     private final AtomicInteger pendingFlushes;
 
@@ -81,6 +84,8 @@ public class TcpClientListener extends TcpClientEventListener {
         poolReuse = newCounter("poolReuse", monitorId);
         poolReleases = newCounter("poolReleases", monitorId);
 
+        pendingReadRequested = newGauge("pendingReadRequested", monitorId, new AtomicLong());
+        pendingWriteRequested = newGauge("pendingWriteRequested", monitorId, new AtomicLong());
         pendingWrites = newGauge("pendingWrites", monitorId, new AtomicInteger());
         pendingFlushes = newGauge("pendingFlushes", monitorId, new AtomicInteger());
 
@@ -213,6 +218,36 @@ public class TcpClientListener extends TcpClientEventListener {
     }
 
     @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        pendingReadRequested.addAndGet(itemsRequested);
+    }
+
+    @Override
+    public void onItemRead() {
+        pendingReadRequested.decrementAndGet();
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        pendingWriteRequested.addAndGet(itemsRequested);
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        pendingWriteRequested.decrementAndGet();
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        pendingReadRequested.addAndGet(-remainingReadRequests);
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        pendingWriteRequested.addAndGet(-remainingWriteRequests);
+    }
+
+    @Override
     public void onConnectStart() {
         pendingConnects.incrementAndGet();
     }
@@ -315,5 +350,13 @@ public class TcpClientListener extends TcpClientEventListener {
 
     public long getPoolReleases() {
         return poolReleases.count();
+    }
+
+    public long getPendingReadRequested() {
+        return pendingReadRequested.get();
+    }
+
+    public long getPendingWriteRequested() {
+        return pendingWriteRequested.get();
     }
 }

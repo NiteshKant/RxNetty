@@ -43,6 +43,38 @@ public class ConnectionEventPublisherTest {
     }
 
     @Test(timeout = 60000)
+    public void testOnItemRead() throws Exception {
+        rule.publisher.onItemRead();
+        rule.listener.assertMethodsCalled(Event.ItemRead);
+
+        assertThat("Listener not called with items read.", rule.listener.getItemsRead(), is(1L));
+    }
+
+    @Test(timeout = 60000)
+    public void testOnItemReceivedToWrite() throws Exception {
+        rule.publisher.onItemReceivedToWrite();
+        rule.listener.assertMethodsCalled(Event.ItemWritten);
+
+        assertThat("Listener not called with items received to write.", rule.listener.getItemsWritten(), is(1L));
+    }
+
+    @Test(timeout = 60000)
+    public void testOnRequestReadMore() throws Exception {
+        rule.publisher.onRequestMoreItemsToRead(1);
+        rule.listener.assertMethodsCalled(Event.RequestReadMore);
+
+        assertThat("Listener not called with read requested.", rule.listener.getTotalReadRequested(), is(1L));
+    }
+
+    @Test(timeout = 60000)
+    public void testOnRequestWriteMore() throws Exception {
+        rule.publisher.onRequestMoreItemsToWrite(1);
+        rule.listener.assertMethodsCalled(Event.RequestWriteMore);
+
+        assertThat("Listener not called with write requested.", rule.listener.getTotalWriteRequested(), is(1L));
+    }
+
+    @Test(timeout = 60000)
     public void testOnFlushStart() throws Exception {
         rule.publisher.onFlushStart();
         rule.listener.assertMethodsCalled(Event.FlushStart);
@@ -200,9 +232,10 @@ public class ConnectionEventPublisherTest {
     public static class ConnectionEventListenerImpl extends ConnectionEventListener {
 
         public enum Event {
-            BytesRead, FlushStart, FlushSuccess, FlushFailed, WriteStart, WriteSuccess, WriteFailed, CloseStart,
-            CloseSuccess, CloseFailed, CustomEvent, CustomEventWithDuration, CustomEventWithDurationAndError,
-            CustomEventWithError, Complete
+            ItemRead, ItemWritten, RequestReadMore, RequestWriteMore, ReadComplete, WriteComplete, BytesRead,
+            FlushStart, FlushSuccess, FlushFailed, WriteStart, WriteSuccess, WriteFailed, CloseStart, CloseSuccess,
+            CloseFailed, CustomEvent,
+            CustomEventWithDuration, CustomEventWithDurationAndError, CustomEventWithError, Complete
         }
 
         private final List<Event> methodsCalled = new ArrayList<>();
@@ -211,7 +244,49 @@ public class ConnectionEventPublisherTest {
         private TimeUnit timeUnit;
         private long bytesWritten;
         private Throwable recievedError;
-        private Object customeEvent;
+        private Object customEvent;
+        private long totalReadRequested;
+        private long itemsRead;
+        private long totalWriteRequested;
+        private long itemsWritten;
+        private long remainingReads;
+        private long remainingWrites;
+
+        @Override
+        public void onRequestMoreItemsToRead(long itemsRequested) {
+            methodsCalled.add(Event.RequestReadMore);
+            totalReadRequested += itemsRequested;
+        }
+
+        @Override
+        public void onRequestMoreItemsToWrite(long itemsRequested) {
+            methodsCalled.add(Event.RequestWriteMore);
+            totalWriteRequested += itemsRequested;
+        }
+
+        @Override
+        public void onItemRead() {
+            methodsCalled.add(Event.ItemRead);
+            itemsRead++;
+        }
+
+        @Override
+        public void onItemReceivedToWrite() {
+            methodsCalled.add(Event.ItemWritten);
+            itemsWritten++;
+        }
+
+        @Override
+        public void onReadCompletion(long remainingReadRequests) {
+            methodsCalled.add(Event.ReadComplete);
+            remainingReads += remainingReadRequests;
+        }
+
+        @Override
+        public void onWriteCompletion(long remainingWriteRequests) {
+            methodsCalled.add(Event.WriteComplete);
+            remainingWrites += remainingWriteRequests;
+        }
 
         @Override
         public void onByteRead(long bytesRead) {
@@ -283,13 +358,13 @@ public class ConnectionEventPublisherTest {
         @Override
         public void onCustomEvent(Object event) {
             methodsCalled.add(Event.CustomEvent);
-            customeEvent = event;
+            customEvent = event;
         }
 
         @Override
         public void onCustomEvent(Object event, long duration, TimeUnit timeUnit) {
             methodsCalled.add(Event.CustomEventWithDuration);
-            customeEvent = event;
+            customEvent = event;
             this.duration = duration;
             this.timeUnit = timeUnit;
         }
@@ -297,7 +372,7 @@ public class ConnectionEventPublisherTest {
         @Override
         public void onCustomEvent(Object event, long duration, TimeUnit timeUnit, Throwable throwable) {
             methodsCalled.add(Event.CustomEventWithDurationAndError);
-            customeEvent = event;
+            customEvent = event;
             this.duration = duration;
             this.timeUnit = timeUnit;
             recievedError = throwable;
@@ -306,7 +381,7 @@ public class ConnectionEventPublisherTest {
         @Override
         public void onCustomEvent(Object event, Throwable throwable) {
             methodsCalled.add(Event.CustomEventWithError);
-            customeEvent = event;
+            customEvent = event;
             recievedError = throwable;
         }
 
@@ -345,7 +420,23 @@ public class ConnectionEventPublisherTest {
         }
 
         public Object getCustomEvent() {
-            return customeEvent;
+            return customEvent;
+        }
+
+        public long getTotalReadRequested() {
+            return totalReadRequested;
+        }
+
+        public long getTotalWriteRequested() {
+            return totalWriteRequested;
+        }
+
+        public long getItemsRead() {
+            return itemsRead;
+        }
+
+        public long getItemsWritten() {
+            return itemsWritten;
         }
     }
 

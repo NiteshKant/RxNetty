@@ -220,6 +220,36 @@ public class HttpClientListener extends HttpClientEventsListener {
     }
 
     @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        tcpDelegate.onRequestMoreItemsToRead(itemsRequested);
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        tcpDelegate.onRequestMoreItemsToWrite(itemsRequested);
+    }
+
+    @Override
+    public void onItemRead() {
+        tcpDelegate.onItemRead();
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        tcpDelegate.onItemReceivedToWrite();
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        tcpDelegate.onReadCompletion(remainingReadRequests);
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        tcpDelegate.onWriteCompletion(remainingWriteRequests);
+    }
+
+    @Override
     public void onConnectSuccess(long duration, TimeUnit timeUnit) {
         tcpDelegate.onConnectSuccess(duration, timeUnit);
     }
@@ -327,5 +357,13 @@ public class HttpClientListener extends HttpClientEventsListener {
 
     public long getPoolReleases() {
         return tcpDelegate.getPoolReleases();
+    }
+
+    public long getPendingWriteRequested() {
+        return tcpDelegate.getPendingWriteRequested();
+    }
+
+    public long getPendingReadRequested() {
+        return tcpDelegate.getPendingReadRequested();
     }
 }

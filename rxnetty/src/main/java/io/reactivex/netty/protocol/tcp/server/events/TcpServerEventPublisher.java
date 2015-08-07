@@ -170,6 +170,36 @@ public final class TcpServerEventPublisher extends TcpServerEventListener
     }
 
     @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        connDelegate.onRequestMoreItemsToRead(itemsRequested);
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        connDelegate.onRequestMoreItemsToWrite(itemsRequested);
+    }
+
+    @Override
+    public void onItemRead() {
+        connDelegate.onItemRead();
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        connDelegate.onItemReceivedToWrite();
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        connDelegate.onReadCompletion(remainingReadRequests);
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        connDelegate.onWriteCompletion(remainingWriteRequests);
+    }
+
+    @Override
     public boolean publishingEnabled() {
         return listeners.publishingEnabled();
     }

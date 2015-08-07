@@ -145,6 +145,48 @@ public class TcpClientEventPublisherTest {
     }
 
     @Test(timeout = 60000)
+    public void testOnRequestMoreItemsToRead() throws Exception {
+        rule.publisher.onRequestMoreItemsToRead(1);
+
+        rule.listener.assertMethodsCalled(Event.RequestReadMore); // Test for Connection publisher should verify rest
+    }
+
+    @Test(timeout = 60000)
+    public void testOnItemRead() throws Exception {
+        rule.publisher.onItemRead();
+
+        rule.listener.assertMethodsCalled(Event.ItemRead); // Test for TCP should verify rest
+    }
+
+    @Test(timeout = 60000)
+    public void testOnItemReceivedToWrite() throws Exception {
+        rule.publisher.onItemReceivedToWrite();
+
+        rule.listener.assertMethodsCalled(Event.ItemWritten); // Test for TCP should verify rest
+    }
+
+    @Test(timeout = 60000)
+    public void testOnRequestMoreItemsToWrite() throws Exception {
+        rule.publisher.onRequestMoreItemsToWrite(1);
+
+        rule.listener.assertMethodsCalled(Event.RequestWriteMore); // Test for Connection publisher should verify rest
+    }
+
+    @Test(timeout = 60000)
+    public void testOnReadCompletion() throws Exception {
+        rule.publisher.onReadCompletion(1);
+
+        rule.listener.assertMethodsCalled(Event.ReadComplete); // Test for TCP should verify rest
+    }
+
+    @Test(timeout = 60000)
+    public void testOnWriteCompletion() throws Exception {
+        rule.publisher.onWriteCompletion(1);
+
+        rule.listener.assertMethodsCalled(Event.WriteComplete); // Test for TCP should verify rest
+    }
+
+    @Test(timeout = 60000)
     public void testOnFlushStart() throws Exception {
         rule.publisher.onFlushStart();
 

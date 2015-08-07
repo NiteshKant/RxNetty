@@ -195,6 +195,36 @@ public class HttpServerListener extends HttpServerEventsListener {
         tcpDelegate.onWriteStart();
     }
 
+    @Override
+    public void onItemRead() {
+        tcpDelegate.onItemRead();
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        tcpDelegate.onItemReceivedToWrite();
+    }
+
+    @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        tcpDelegate.onRequestMoreItemsToRead(itemsRequested);
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        tcpDelegate.onRequestMoreItemsToWrite(itemsRequested);
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        tcpDelegate.onReadCompletion(remainingReadRequests);
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        tcpDelegate.onWriteCompletion(remainingWriteRequests);
+    }
+
     public long getLiveConnections() {
         return tcpDelegate.getLiveConnections();
     }
@@ -241,5 +271,13 @@ public class HttpServerListener extends HttpServerEventsListener {
 
     public Timer getFlushTimes() {
         return tcpDelegate.getFlushTimes();
+    }
+
+    public long getPendingWriteRequested() {
+        return tcpDelegate.getPendingWriteRequested();
+    }
+
+    public long getPendingReadRequested() {
+        return tcpDelegate.getPendingReadRequested();
     }
 }

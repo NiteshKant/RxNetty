@@ -156,6 +156,36 @@ public class TcpServerEventListenerImpl extends TcpServerEventListener {
         connDelegate.onCustomEvent(event, throwable);
     }
 
+    @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        connDelegate.onRequestMoreItemsToRead(itemsRequested);
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        connDelegate.onRequestMoreItemsToWrite(itemsRequested);
+    }
+
+    @Override
+    public void onItemRead() {
+        connDelegate.onItemRead();
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        connDelegate.onItemReceivedToWrite();
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        connDelegate.onWriteCompletion(remainingWriteRequests);
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        connDelegate.onReadCompletion(remainingReadRequests);
+    }
+
     public void assertMethodsCalled(ServerEvent... events) {
         assertThat("Unexpected methods called count.", methodsCalled, hasSize(events.length));
         assertThat("Unexpected methods called.", methodsCalled, contains(events));

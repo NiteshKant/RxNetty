@@ -43,6 +43,48 @@ public final class ConnectionEventPublisher<T extends ConnectionEventListener> e
         }
     };
 
+    private final Action2<T, Long> requestMoreToReadAction = new Action2<T, Long>() {
+        @Override
+        public void call(T l, Long more) {
+            l.onRequestMoreItemsToRead(more);
+        }
+    };
+
+    private final Action1<T> itemReadAction = new Action1<T>() {
+        @Override
+        public void call(T l) {
+            l.onItemRead();
+        }
+    };
+
+    private final Action2<T, Long> readCompletionAction = new Action2<T, Long>() {
+        @Override
+        public void call(T l, Long pendingItems) {
+            l.onReadCompletion(pendingItems);
+        }
+    };
+
+    private final Action2<T, Long> requestMoreToWriteAction = new Action2<T, Long>() {
+        @Override
+        public void call(T l, Long bytesRead) {
+            l.onRequestMoreItemsToWrite(bytesRead);
+        }
+    };
+
+    private final Action1<T> itemReceivedToWriteAction = new Action1<T>() {
+        @Override
+        public void call(T l) {
+            l.onItemReceivedToWrite();
+        }
+    };
+
+    private final Action2<T, Long> writeCompletionAction = new Action2<T, Long>() {
+        @Override
+        public void call(T l, Long pendingItems) {
+            l.onWriteCompletion(pendingItems);
+        }
+    };
+
     private final Action1<T> flushStartAction = new Action1<T>() {
         @Override
         public void call(T l) {
@@ -146,6 +188,36 @@ public final class ConnectionEventPublisher<T extends ConnectionEventListener> e
 
     public ConnectionEventPublisher(ConnectionEventPublisher<T> toCopy) {
         listeners = toCopy.listeners.copy();
+    }
+
+    @Override
+    public void onItemRead() {
+        listeners.invokeListeners(itemReadAction);
+    }
+
+    @Override
+    public void onItemReceivedToWrite() {
+        listeners.invokeListeners(itemReceivedToWriteAction);
+    }
+
+    @Override
+    public void onReadCompletion(long remainingReadRequests) {
+        listeners.invokeListeners(readCompletionAction, remainingReadRequests);
+    }
+
+    @Override
+    public void onWriteCompletion(long remainingWriteRequests) {
+        listeners.invokeListeners(writeCompletionAction, remainingWriteRequests);
+    }
+
+    @Override
+    public void onRequestMoreItemsToRead(long itemsRequested) {
+        listeners.invokeListeners(requestMoreToReadAction, itemsRequested);
+    }
+
+    @Override
+    public void onRequestMoreItemsToWrite(long itemsRequested) {
+        listeners.invokeListeners(requestMoreToWriteAction, itemsRequested);
     }
 
     @Override

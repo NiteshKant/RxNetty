@@ -25,11 +25,74 @@ import java.util.concurrent.TimeUnit;
 public abstract class ConnectionEventListener implements EventListener {
 
     /**
+     * Whenever a subscriber to the connection input requests more items to be read.
+     *
+     * This does <em>not</em> represent number of bytes requested to be read but the number of messages requested, which
+     * depends on what the connection is configured to be read, from a {@link io.netty.buffer.ByteBuf} to a custom
+     * object.
+     *
+     * @param itemsRequested Number of items requested for read.
+     */
+    public void onRequestMoreItemsToRead(long itemsRequested) { }
+
+    /**
+     * For all writes, this event is fired whenever the connection reads another item.
+     *
+     * Typically, this would be used with {@link #onRequestMoreItemsToRead(long)} in order to infer outstanding demand.
+     */
+    public void onItemRead() { }
+
+    /**
+     * For all writes, this event is fired whenever the connection requests more items to be emitted and written. Since,
+     * this does not refer to the actual {@code Observable} written on the connection, if there are multiple writes on
+     * the same connection, this event will be fired for all of them and there is no way to map these requests to the
+     * writes performed on the connection.
+     *
+     * This does <em>not</em> represent number of bytes requested to be written but the number of messages requested,
+     * which depends on what the connection is configured to be written, from a {@link io.netty.buffer.ByteBuf} to a
+     * custom object.
+     *
+     * @param itemsRequested Number of items requested for read.
+     */
+    public void onRequestMoreItemsToWrite(long itemsRequested) { }
+
+    /**
+     * For all writes, this event is fired whenever the connection receives another item to be written. Since,
+     * this does not refer to the actual {@code Observable} written on the connection, if there are multiple writes on
+     * the same connection, this event will be fired for all of them and there is no way to map these requests to the
+     * writes performed on the connection.
+     *
+     * Typically, this would be used with {@link #onRequestMoreItemsToWrite(long)} in order to infer outstanding demand.
+     */
+    public void onItemReceivedToWrite() { }
+
+    /**
+     * This event is fired for every read completion (via error, completion or unsubscribe) from a connection. This
+     * event is useful to correctly counting pending read item requests since this event contains the number of
+     * outstanding read requests which will never be fulfilled (since the stream has completed either due to unsubscribe
+     * or a terminal event).
+     *
+     * @param remainingReadRequests The number of read requests as informed by {@link #onRequestMoreItemsToRead(long)}
+     * that will never be fulfilled.
+     */
+    public void onReadCompletion(long remainingReadRequests) { }
+
+    /**
+     * This event is fired for every write completion (via error, completion or unsubscribe) from a connection. This
+     * event is useful to correctly counting pending write item requests since this event contains the number of
+     * outstanding read requests which will never be fulfilled (since the stream has completed either due to unsubscribe
+     * or a terminal event).
+     *
+     * @param remainingWriteRequests The number of write requests as informed by
+     * {@link #onRequestMoreItemsToWrite(long)} that will never be fulfilled.
+     */
+    public void onWriteCompletion(long remainingWriteRequests) { }
+
+    /**
      * Event whenever any bytes are read on any open connection.
      *
      * @param bytesRead Number of bytes read.
      */
-    @SuppressWarnings("unused")
     public void onByteRead(long bytesRead) { }
 
     /**
